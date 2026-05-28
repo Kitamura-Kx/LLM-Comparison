@@ -1,0 +1,256 @@
+:root {
+  --background: #f7f7f4;
+  --foreground: #1f2520;
+  --muted: #626b64;
+  --line: #d9ddd5;
+  --accent: #2f7d68;
+  --accent-strong: #23614f;
+  --surface: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.home {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 32px;
+}
+
+.homeInner {
+  width: min(720px, 100%);
+}
+
+.eyebrow {
+  margin: 0 0 12px;
+  color: var(--accent-strong);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+h1 {
+  margin: 0;
+  font-size: 44px;
+  line-height: 1.1;
+}
+
+.lead {
+  margin: 18px 0 32px;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1.7;
+}
+
+.routeGrid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.routeButton {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  font-size: 18px;
+  font-weight: 700;
+  justify-content: space-between;
+  min-height: 88px;
+  padding: 22px 24px;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.routeButton:hover,
+.routeButton:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 12px 30px rgb(47 125 104 / 14%);
+  outline: none;
+  transform: translateY(-2px);
+}
+
+.routeButton span:last-child {
+  color: var(--accent);
+  font-size: 24px;
+}
+
+.toolPage {
+  margin: 0 auto;
+  max-width: 920px;
+  min-height: 100vh;
+  padding: 40px 28px 64px;
+}
+
+.toolHeader {
+  margin-bottom: 28px;
+}
+
+.backLink {
+  color: var(--muted);
+  display: inline-block;
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 24px;
+}
+
+.backLink:hover,
+.backLink:focus-visible {
+  color: var(--accent-strong);
+  outline: none;
+}
+
+.askForm {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.fieldLabel {
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.questionInput {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--foreground);
+  font: inherit;
+  line-height: 1.6;
+  min-height: 150px;
+  padding: 16px;
+  resize: vertical;
+  width: 100%;
+}
+
+.questionInput:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgb(47 125 104 / 14%);
+  outline: none;
+}
+
+.submitButton {
+  background: var(--accent);
+  border: 0;
+  border-radius: 8px;
+  color: white;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  justify-self: start;
+  min-height: 44px;
+  padding: 0 22px;
+}
+
+.submitButton:hover,
+.submitButton:focus-visible {
+  background: var(--accent-strong);
+  outline: none;
+}
+
+.submitButton:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.errorMessage {
+  background: #fff1ef;
+  border: 1px solid #f1c3bd;
+  border-radius: 8px;
+  color: #8b2d22;
+  padding: 14px 16px;
+}
+
+.answerPanel,
+.sourceList {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-top: 18px;
+  padding: 22px;
+}
+
+.answerPanel h2,
+.sourceList h2 {
+  font-size: 18px;
+  margin: 0 0 12px;
+}
+
+.answerPanel p {
+  line-height: 1.8;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.sourceList ul {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sourceList li {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding-top: 10px;
+}
+
+.sourceList li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.sourceList small {
+  color: var(--muted);
+}
+
+@media (max-width: 640px) {
+  .home {
+    padding: 24px;
+    place-items: start;
+  }
+
+  h1 {
+    font-size: 34px;
+  }
+
+  .routeGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .toolPage {
+    padding: 24px;
+  }
+
+  .sourceList li {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
