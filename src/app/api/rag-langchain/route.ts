@@ -20,8 +20,8 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error(error);
     const message =
-      error instanceof Error && error.message.toLowerCase().includes("chroma")
-        ? "Chromaサーバーに接続できません。`npm run chroma` でChromaを起動してください。"
+      error instanceof Error && error.message.includes("PINECONE_API_KEY")
+        ? "PINECONE_API_KEY が未設定です。.env にPineconeのAPIキーを入れてください。"
         : "回答の生成に失敗しました。";
 
     return NextResponse.json(
