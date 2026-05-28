@@ -19,8 +19,13 @@ export async function POST(request: Request) {
     return NextResponse.json(result);
   } catch (error) {
     console.error(error);
+    const message =
+      error instanceof Error && error.message.toLowerCase().includes("chroma")
+        ? "Chromaサーバーに接続できません。`npm run chroma` でChromaを起動してください。"
+        : "回答の生成に失敗しました。";
+
     return NextResponse.json(
-      { error: "回答の生成に失敗しました。" },
+      { error: message },
       { status: 500 },
     );
   }

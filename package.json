@@ -3,14 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "chroma": "docker compose up -d chroma",
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "stop:chroma": "docker compose stop chroma"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@langchain/core": "^1.1.48",
     "@langchain/google-genai": "^2.1.31",
+    "chromadb": "^3.4.3",
     "langchain": "^1.4.2",
     "next": "^16.2.1",
     "react": "^19.2.4",

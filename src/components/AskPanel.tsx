@@ -8,6 +8,13 @@ type Source = {
   score?: number;
 };
 
+type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  sources?: Source[];
+};
+
 type AskPanelProps = {
   apiPath: string;
   description: string;
@@ -22,22 +29,29 @@ export default function AskPanel({
   title,
 }: AskPanelProps) {
   const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState("");
-  const [sources, setSources] = useState<Source[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!question.trim()) {
+    const trimmedQuestion = question.trim();
+
+    if (!trimmedQuestion) {
       return;
     }
 
+    const userMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: "user",
+      text: trimmedQuestion,
+    };
+
+    setMessages((currentMessages) => [...currentMessages, userMessage]);
+    setQuestion("");
     setIsLoading(true);
     setError("");
-    setAnswer("");
-    setSources([]);
 
     try {
       const response = await fetch(apiPath, {
@@ -45,7 +59,7 @@ export default function AskPanel({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({ question: trimmedQuestion }),
       });
       const data = await response.json();
 
@@ -53,8 +67,15 @@ export default function AskPanel({
         throw new Error(data.error ?? "回答の生成に失敗しました。");
       }
 
-      setAnswer(data.answer ?? "");
-      setSources(data.sources ?? []);
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          text: data.answer ?? "",
+          sources: data.sources ?? [],
+        },
+      ]);
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
@@ -67,55 +88,84 @@ export default function AskPanel({
   }
 
   return (
-    <main className="toolPage">
-      <section className="toolHeader">
+    <main className="chatPage">
+      <header className="chatHeader">
         <a className="backLink" href="/">
           ← 戻る
         </a>
-        <p className="eyebrow">LLM Comparison</p>
-        <h1>{title}</h1>
-        <p className="lead">{description}</p>
-      </section>
-
-      <form className="askForm" onSubmit={handleSubmit}>
-        <label className="fieldLabel" htmlFor="question">
-          質問
-        </label>
-        <textarea
-          className="questionInput"
-          id="question"
-          onChange={(event) => setQuestion(event.target.value)}
-          placeholder={placeholder}
-          rows={5}
-          value={question}
-        />
-        <button className="submitButton" disabled={isLoading} type="submit">
-          {isLoading ? "生成中..." : "質問する"}
-        </button>
-      </form>
+        <div>
+          <p className="chatKicker">LLM Comparison</p>
+          <h1>{title}</h1>
+          <p>{description}</p>
+        </div>
+      </header>
 
       {error ? <p className="errorMessage">{error}</p> : null}
 
-      {answer ? (
-        <section className="answerPanel" aria-live="polite">
-          <h2>回答</h2>
-          <p>{answer}</p>
-        </section>
-      ) : null}
+      <section className="chatWindow" aria-live="polite">
+        {messages.length === 0 ? (
+          <div className="emptyChat">
+            <p>{placeholder}</p>
+          </div>
+        ) : null}
 
-      {sources.length > 0 ? (
-        <section className="sourceList">
-          <h2>参照資料</h2>
-          <ul>
-            {sources.map((source) => (
-              <li key={source.id}>
-                <span>{source.title}</span>
-                <small>{source.id}</small>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+        {messages.map((message) => (
+          <article
+            className={`chatRow ${message.role === "user" ? "isUser" : "isAssistant"}`}
+            key={message.id}
+          >
+            <div className="avatar" aria-hidden="true">
+              {message.role === "user" ? "U" : "AI"}
+            </div>
+            <div className="bubbleGroup">
+              <p className="chatBubble">{message.text}</p>
+              {message.sources && message.sources.length > 0 ? (
+                <details className="chatSources">
+                  <summary>参照資料</summary>
+                  <ul>
+                    {message.sources.map((source) => (
+                      <li key={source.id}>
+                        <span>{source.title}</span>
+                        <small>{source.id}</small>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              ) : null}
+            </div>
+          </article>
+        ))}
+
+        {isLoading ? (
+          <article className="chatRow isAssistant">
+            <div className="avatar" aria-hidden="true">
+              AI
+            </div>
+            <div className="bubbleGroup">
+              <p className="chatBubble typing">生成中...</p>
+            </div>
+          </article>
+        ) : null}
+      </section>
+
+      <form className="chatComposer" onSubmit={handleSubmit}>
+        <textarea
+          aria-label="質問"
+          className="chatInput"
+          onChange={(event) => setQuestion(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+              event.currentTarget.form?.requestSubmit();
+            }
+          }}
+          placeholder={placeholder}
+          rows={1}
+          value={question}
+        />
+        <button className="sendButton" disabled={isLoading} type="submit">
+          送信
+        </button>
+      </form>
     </main>
   );
 }

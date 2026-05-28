@@ -1,4 +1,5 @@
 import { TaskType } from "@google/generative-ai";
+import { ChromaClient, type Metadata } from "chromadb";
 import {
   ChatGoogleGenerativeAI,
   GoogleGenerativeAIEmbeddings,
@@ -7,74 +8,102 @@ import { HumanMessage } from "@langchain/core/messages";
 import { getGeminiApiKey } from "./gemini";
 import { loadReferenceDocuments, splitDocuments } from "./referenceData";
 
-type EmbeddedChunk = {
-  id: string;
-  title: string;
-  content: string;
-  embedding: number[];
-};
+const collectionName = process.env.CHROMA_COLLECTION ?? "llm_comparison_history";
+let collectionReadyPromise: Promise<void> | null = null;
 
-let embeddedChunksPromise: Promise<EmbeddedChunk[]> | null = null;
-
-function cosineSimilarity(a: number[], b: number[]) {
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-
-  for (let i = 0; i < Math.min(a.length, b.length); i += 1) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-
-  if (normA === 0 || normB === 0) {
-    return 0;
-  }
-
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+function getChromaClient() {
+  return new ChromaClient({
+    host: process.env.CHROMA_HOST ?? "localhost",
+    port: Number(process.env.CHROMA_PORT ?? 8000),
+    ssl: process.env.CHROMA_SSL === "true",
+  });
 }
 
-async function getEmbeddedChunks() {
-  if (!embeddedChunksPromise) {
-    embeddedChunksPromise = (async () => {
-      const apiKey = getGeminiApiKey();
-      const documents = await loadReferenceDocuments();
-      const chunks = splitDocuments(documents);
-      const embeddings = new GoogleGenerativeAIEmbeddings({
-        apiKey,
-        modelName: process.env.GEMINI_EMBEDDING_MODEL ?? "gemini-embedding-001",
-        taskType: TaskType.RETRIEVAL_DOCUMENT,
-      });
-      const vectors = await embeddings.embedDocuments(
-        chunks.map((chunk) => chunk.content),
-      );
+function getEmbeddingModel(taskType: TaskType) {
+  return new GoogleGenerativeAIEmbeddings({
+    apiKey: getGeminiApiKey(),
+    modelName: process.env.GEMINI_EMBEDDING_MODEL ?? "gemini-embedding-001",
+    taskType,
+  });
+}
 
-      return chunks.map((chunk, index) => ({
-        ...chunk,
-        embedding: vectors[index],
-      }));
-    })();
+async function ensureChromaCollection() {
+  const client = getChromaClient();
+  const documents = await loadReferenceDocuments();
+  const chunks = splitDocuments(documents);
+  let collection = await client.getOrCreateCollection({
+    name: collectionName,
+    embeddingFunction: null,
+    metadata: {
+      description: "LLM comparison local history documents",
+    },
+  });
+  const currentCount = await collection.count();
+
+  if (currentCount === chunks.length) {
+    return collection;
   }
 
-  return embeddedChunksPromise;
+  if (currentCount > 0) {
+    await client.deleteCollection({ name: collectionName });
+    collection = await client.getOrCreateCollection({
+      name: collectionName,
+      embeddingFunction: null,
+      metadata: {
+        description: "LLM comparison local history documents",
+      },
+    });
+  }
+
+  const embeddings = getEmbeddingModel(TaskType.RETRIEVAL_DOCUMENT);
+  const vectors = await embeddings.embedDocuments(
+    chunks.map((chunk) => chunk.content),
+  );
+
+  await collection.add({
+    ids: chunks.map((chunk) => chunk.id),
+    embeddings: vectors,
+    documents: chunks.map((chunk) => chunk.content),
+    metadatas: chunks.map(
+      (chunk) =>
+        ({
+          title: chunk.title,
+        }) satisfies Metadata,
+    ),
+  });
+
+  return collection;
+}
+
+async function getReadyCollection() {
+  if (!collectionReadyPromise) {
+    collectionReadyPromise = ensureChromaCollection().then(() => undefined);
+  }
+
+  await collectionReadyPromise;
+
+  return getChromaClient().getCollection({
+    name: collectionName,
+    embeddingFunction: undefined,
+  });
 }
 
 export async function askWithLangChainRag(question: string) {
   const apiKey = getGeminiApiKey();
-  const chunks = await getEmbeddedChunks();
-  const queryEmbeddings = new GoogleGenerativeAIEmbeddings({
-    apiKey,
-    modelName: process.env.GEMINI_EMBEDDING_MODEL ?? "gemini-embedding-001",
-    taskType: TaskType.RETRIEVAL_QUERY,
-  });
+  const collection = await getReadyCollection();
+  const queryEmbeddings = getEmbeddingModel(TaskType.RETRIEVAL_QUERY);
   const queryVector = await queryEmbeddings.embedQuery(question);
-  const sources = chunks
-    .map((chunk) => ({
-      ...chunk,
-      score: cosineSimilarity(queryVector, chunk.embedding),
-    }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 5);
+  const queryResult = await collection.query<{ title: string }>({
+    queryEmbeddings: [queryVector],
+    nResults: 5,
+    include: ["documents", "metadatas", "distances"],
+  });
+  const sources = queryResult.ids[0].map((id, index) => ({
+    id,
+    title: queryResult.metadatas[0][index]?.title ?? id,
+    content: queryResult.documents[0][index] ?? "",
+    distance: queryResult.distances[0][index] ?? undefined,
+  }));
 
   const context = sources
     .map((source) => `### ${source.title} (${source.id})\n${source.content}`)
@@ -103,7 +132,7 @@ ${context}`),
     sources: sources.map((source) => ({
       id: source.id,
       title: source.title,
-      score: source.score,
+      score: source.distance,
     })),
   };
 }
