@@ -1,5 +1,9 @@
 import { TaskType } from "@google/generative-ai";
-import { ChromaClient, type Metadata } from "chromadb";
+import {
+  Pinecone,
+  type PineconeRecord,
+  type RecordMetadata,
+} from "@pinecone-database/pinecone";
 import {
   ChatGoogleGenerativeAI,
   GoogleGenerativeAIEmbeddings,
@@ -8,14 +12,28 @@ import { HumanMessage } from "@langchain/core/messages";
 import { getGeminiApiKey } from "./gemini";
 import { loadReferenceDocuments, splitDocuments } from "./referenceData";
 
-const collectionName = process.env.CHROMA_COLLECTION ?? "llm_comparison_history";
-let collectionReadyPromise: Promise<void> | null = null;
+type HistoryChunkMetadata = RecordMetadata & {
+  content: string;
+  title: string;
+};
 
-function getChromaClient() {
-  return new ChromaClient({
-    host: process.env.CHROMA_HOST ?? "localhost",
-    port: Number(process.env.CHROMA_PORT ?? 8000),
-    ssl: process.env.CHROMA_SSL === "true",
+const pineconeIndexName = process.env.PINECONE_INDEX ?? "llm-comparison";
+const pineconeNamespace = process.env.PINECONE_NAMESPACE ?? "history";
+let pineconeReadyPromise: Promise<void> | null = null;
+
+function getPineconeApiKey() {
+  const apiKey = process.env.PINECONE_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("PINECONE_API_KEY is not set.");
+  }
+
+  return apiKey;
+}
+
+function getPineconeClient() {
+  return new Pinecone({
+    apiKey: getPineconeApiKey(),
   });
 }
 
@@ -27,84 +45,94 @@ function getEmbeddingModel(taskType: TaskType) {
   });
 }
 
-async function ensureChromaCollection() {
-  const client = getChromaClient();
+async function ensurePineconeIndex(client: Pinecone) {
+  await client.createIndex({
+    name: pineconeIndexName,
+    dimension: Number(process.env.PINECONE_DIMENSION ?? 3072),
+    metric: "cosine",
+    spec: {
+      serverless: {
+        cloud: process.env.PINECONE_CLOUD ?? "aws",
+        region: process.env.PINECONE_REGION ?? "us-east-1",
+      },
+    },
+    suppressConflicts: true,
+    waitUntilReady: true,
+  });
+}
+
+async function upsertDocumentsIfNeeded(client: Pinecone) {
+  const index = client.index<HistoryChunkMetadata>(pineconeIndexName);
   const documents = await loadReferenceDocuments();
   const chunks = splitDocuments(documents);
-  let collection = await client.getOrCreateCollection({
-    name: collectionName,
-    embeddingFunction: null,
-    metadata: {
-      description: "LLM comparison local history documents",
-    },
-  });
-  const currentCount = await collection.count();
+  const stats = await index.describeIndexStats();
+  const currentCount = stats.namespaces?.[pineconeNamespace]?.recordCount ?? 0;
 
   if (currentCount === chunks.length) {
-    return collection;
+    return;
   }
 
   if (currentCount > 0) {
-    await client.deleteCollection({ name: collectionName });
-    collection = await client.getOrCreateCollection({
-      name: collectionName,
-      embeddingFunction: null,
-      metadata: {
-        description: "LLM comparison local history documents",
-      },
-    });
+    await index.deleteAll({ namespace: pineconeNamespace });
   }
 
   const embeddings = getEmbeddingModel(TaskType.RETRIEVAL_DOCUMENT);
   const vectors = await embeddings.embedDocuments(
     chunks.map((chunk) => chunk.content),
   );
+  const records: PineconeRecord<HistoryChunkMetadata>[] = chunks.map(
+    (chunk, index) => ({
+      id: chunk.id,
+      values: vectors[index],
+      metadata: {
+        content: chunk.content,
+        title: chunk.title,
+      },
+    }),
+  );
 
-  await collection.add({
-    ids: chunks.map((chunk) => chunk.id),
-    embeddings: vectors,
-    documents: chunks.map((chunk) => chunk.content),
-    metadatas: chunks.map(
-      (chunk) =>
-        ({
-          title: chunk.title,
-        }) satisfies Metadata,
-    ),
-  });
-
-  return collection;
+  for (let index = 0; index < records.length; index += 100) {
+    await client.index<HistoryChunkMetadata>(pineconeIndexName).upsert({
+      namespace: pineconeNamespace,
+      records: records.slice(index, index + 100),
+    });
+  }
 }
 
-async function getReadyCollection() {
-  if (!collectionReadyPromise) {
-    collectionReadyPromise = ensureChromaCollection().then(() => undefined);
+async function ensurePineconeReady() {
+  if (!pineconeReadyPromise) {
+    pineconeReadyPromise = (async () => {
+      const client = getPineconeClient();
+
+      await ensurePineconeIndex(client);
+      await upsertDocumentsIfNeeded(client);
+    })();
   }
 
-  await collectionReadyPromise;
-
-  return getChromaClient().getCollection({
-    name: collectionName,
-    embeddingFunction: undefined,
-  });
+  await pineconeReadyPromise;
 }
 
 export async function askWithLangChainRag(question: string) {
   const apiKey = getGeminiApiKey();
-  const collection = await getReadyCollection();
+
+  await ensurePineconeReady();
+
+  const client = getPineconeClient();
+  const index = client.index<HistoryChunkMetadata>(pineconeIndexName);
   const queryEmbeddings = getEmbeddingModel(TaskType.RETRIEVAL_QUERY);
   const queryVector = await queryEmbeddings.embedQuery(question);
-  const queryResult = await collection.query<{ title: string }>({
-    queryEmbeddings: [queryVector],
-    nResults: 5,
-    include: ["documents", "metadatas", "distances"],
+  const queryResult = await index.query({
+    namespace: pineconeNamespace,
+    vector: queryVector,
+    topK: 5,
+    includeMetadata: true,
   });
-  const sources = queryResult.ids[0].map((id, index) => ({
-    id,
-    title: queryResult.metadatas[0][index]?.title ?? id,
-    content: queryResult.documents[0][index] ?? "",
-    distance: queryResult.distances[0][index] ?? undefined,
+  const sources = queryResult.matches.map((match) => ({
+    id: match.id,
+    title: match.metadata?.title ?? match.id,
+    content: match.metadata?.content ?? "",
+    score: match.score,
   }));
-
   const context = sources
     .map((source) => `### ${source.title} (${source.id})\n${source.content}`)
     .join("\n\n---\n\n");
@@ -132,7 +160,7 @@ ${context}`),
     sources: sources.map((source) => ({
       id: source.id,
       title: source.title,
-      score: source.distance,
+      score: source.score,
     })),
   };
 }
