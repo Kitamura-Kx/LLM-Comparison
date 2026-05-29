@@ -1,9 +1,5 @@
 import { NextResponse } from "next/server";
-import { askGemini } from "@/lib/gemini";
-import {
-  formatDocumentsForPrompt,
-  loadReferenceDocuments,
-} from "@/lib/referenceData";
+import { answerWithRawContext } from "@/lib/chat";
 
 export const runtime = "nodejs";
 
@@ -18,25 +14,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const documents = await loadReferenceDocuments();
-    const context = formatDocumentsForPrompt(documents);
-    const answer = await askGemini(`あなたは日本史の説明に強いアシスタントです。
-以下の資料全文だけを根拠に、質問へ日本語で回答してください。
-資料にないことは推測せず、「資料内では確認できません」と書いてください。
-
-質問:
-${question}
-
-資料全文:
-${context}`);
-
-    return NextResponse.json({
-      answer,
-      sources: documents.map((document) => ({
-        id: document.id,
-        title: document.title,
-      })),
-    });
+    return NextResponse.json(await answerWithRawContext(question));
   } catch (error) {
     console.error(error);
     return NextResponse.json(

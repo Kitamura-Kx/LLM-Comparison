@@ -8,6 +8,11 @@ export type ReferenceDocument = {
 };
 
 const dataDirectory = path.join(process.cwd(), "data");
+const sourceFilePath = path.join(dataDirectory, "source.txt");
+
+export async function loadSourceText() {
+  return fs.readFile(sourceFilePath, "utf8");
+}
 
 export async function loadReferenceDocuments(): Promise<ReferenceDocument[]> {
   const fileNames = await fs.readdir(dataDirectory);

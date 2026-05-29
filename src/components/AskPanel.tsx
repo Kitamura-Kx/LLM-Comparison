@@ -18,6 +18,7 @@ type ChatMessage = {
 type AskPanelProps = {
   apiPath: string;
   description: string;
+  mode: "raw" | "rag";
   placeholder: string;
   title: string;
 };
@@ -25,6 +26,7 @@ type AskPanelProps = {
 export default function AskPanel({
   apiPath,
   description,
+  mode,
   placeholder,
   title,
 }: AskPanelProps) {
@@ -59,7 +61,7 @@ export default function AskPanel({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ question: trimmedQuestion }),
+        body: JSON.stringify({ mode, question: trimmedQuestion }),
       });
       const data = await response.json();
 

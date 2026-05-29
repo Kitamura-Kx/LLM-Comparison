@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
-import { askWithLangChainRag } from "@/lib/rag";
+import { answerQuestion, type ChatMode } from "@/lib/chat";
 
 export const runtime = "nodejs";
 
+function isChatMode(value: unknown): value is ChatMode {
+  return value === "raw" || value === "rag";
+}
+
 export async function POST(request: Request) {
   try {
-    const { question } = await request.json();
+    const { mode, question } = await request.json();
 
     if (typeof question !== "string" || !question.trim()) {
       return NextResponse.json(
@@ -14,7 +18,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await askWithLangChainRag(question);
+    if (!isChatMode(mode)) {
+      return NextResponse.json(
+        { error: 'mode は "raw" または "rag" を指定してください。' },
+        { status: 400 },
+      );
+    }
+
+    const result = await answerQuestion(question, mode);
 
     return NextResponse.json(result);
   } catch (error) {
@@ -24,9 +35,6 @@ export async function POST(request: Request) {
         ? "vectorstore/store.json が見つかりません。ローカルで `npm run build:vectorstore` を実行してからデプロイしてください。"
         : "回答の生成に失敗しました。";
 
-    return NextResponse.json(
-      { error: message },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
