@@ -1,6 +1,5 @@
-import { TaskType } from "@google/generative-ai";
-import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { askGemini, getGeminiApiKey } from "./gemini";
+import { embedText } from "./embeddings";
 import { loadSourceText } from "./referenceData";
 import { cosineSimilarity, loadLocalVectorstore } from "./vectorstore";
 
@@ -11,8 +10,6 @@ export type ChatSource = {
   score?: number;
   title: string;
 };
-
-const embeddingModel = process.env.GEMINI_EMBEDDING_MODEL ?? "gemini-embedding-001";
 
 export async function answerWithRawContext(question: string) {
   const sourceText = await loadSourceText();
@@ -41,12 +38,9 @@ ${sourceText}`);
 
 export async function answerWithRagContext(question: string) {
   const vectorstore = await loadLocalVectorstore();
-  const embeddings = new GoogleGenerativeAIEmbeddings({
-    apiKey: getGeminiApiKey(),
-    modelName: embeddingModel,
-    taskType: TaskType.RETRIEVAL_QUERY,
-  });
-  const queryVector = await embeddings.embedQuery(question);
+  getGeminiApiKey();
+
+  const queryVector = await embedText(question, "RETRIEVAL_QUERY");
   const sources = vectorstore.chunks
     .map((chunk) => ({
       ...chunk,

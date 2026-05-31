@@ -1,9 +1,8 @@
-import { TaskType } from "@google/generative-ai";
-import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { existsSync } from "fs";
 import { promises as fs } from "fs";
 import path from "path";
+import { embedText } from "../src/lib/embeddings";
 import type { LocalVectorstore } from "../src/lib/vectorstore";
 
 const sourcePath = path.join(process.cwd(), "data", "source.txt");
@@ -101,14 +100,13 @@ async function main() {
       ),
     )
   ).flat();
-  const embeddings = new GoogleGenerativeAIEmbeddings({
-    apiKey: getGeminiApiKey(),
-    modelName: embeddingModel,
-    taskType: TaskType.RETRIEVAL_DOCUMENT,
-  });
-  const vectors = await embeddings.embedDocuments(
-    documents.map((document) => document.pageContent),
-  );
+  getGeminiApiKey();
+
+  const vectors: number[][] = [];
+
+  for (const document of documents) {
+    vectors.push(await embedText(document.pageContent, "RETRIEVAL_DOCUMENT"));
+  }
   const vectorstore: LocalVectorstore = {
     chunks: documents.map((document, index) => ({
       content: document.pageContent,
