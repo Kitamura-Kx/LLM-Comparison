@@ -18,6 +18,7 @@ type ChatMessage = {
 type AskPanelProps = {
   apiPath: string;
   description: string;
+  initialMessage: string;
   mode: "raw" | "rag";
   placeholder: string;
   title: string;
@@ -26,12 +27,19 @@ type AskPanelProps = {
 export default function AskPanel({
   apiPath,
   description,
+  initialMessage,
   mode,
   placeholder,
   title,
 }: AskPanelProps) {
   const [question, setQuestion] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: "initial-message",
+      role: "assistant",
+      text: initialMessage,
+    },
+  ]);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -105,12 +113,6 @@ export default function AskPanel({
       {error ? <p className="errorMessage">{error}</p> : null}
 
       <section className="chatWindow" aria-live="polite">
-        {messages.length === 0 ? (
-          <div className="emptyChat">
-            <p>{placeholder}</p>
-          </div>
-        ) : null}
-
         {messages.map((message) => (
           <article
             className={`chatRow ${message.role === "user" ? "isUser" : "isAssistant"}`}
