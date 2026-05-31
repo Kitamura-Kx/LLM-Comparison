@@ -9,7 +9,5 @@
 
 #使用するフレームワーク  
 - Next.js  
-- Langchain
-- Llamaindex
-- vercel  
+- vercel
 
