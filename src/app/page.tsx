@@ -3,11 +3,11 @@ import Link from "next/link";
 const routes = [
   {
     href: "/text-reference-llm",
-    label: "テキスト参照LLM",
+    label: "戦国・安土桃山史チャット 全文参照版",
   },
   {
     href: "/rag-langchain",
-    label: "RAG(Langchain)",
+    label: "戦国・安土桃山史チャット RAG検索版",
   },
 ];
 
@@ -15,10 +15,10 @@ export default function Home() {
   return (
     <main className="home">
       <div className="homeInner">
-        <p className="eyebrow">LLM Comparison</p>
-        <h1>比較するLLM手法を選択</h1>
+        <p className="eyebrow">Sengoku History Chatbot</p>
+        <h1>戦国・安土桃山時代の歴史チャット</h1>
         <p className="lead">
-          テキスト参照型とRAG型のチャットボットを切り替えて比較できます。
+          織田信長、豊臣秀吉、関ヶ原の戦いなどの固定文書をもとに、全文参照型とRAG型の回答を比較できます。
         </p>
         <nav aria-label="LLM comparison routes" className="routeGrid">
           {routes.map((route) => (
